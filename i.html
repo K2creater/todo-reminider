@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>To-Do Reminder VAARV1AQ</title>
+
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: #f4f7f6;
+    color: #333;
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  h2, h3 {
+    color: #2c3e50;
+    text-align: center;
+  }
+  #container {
+    background: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    width: 100%;
+    max-width: 500px;
+    padding: 25px;
+    margin-bottom: 20px;
+  }
+  input[type="text"], input[type="date"], input[type="time"] {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-sizing: border-box; /* Important for padding to work well */
+  }
+  button {
+    padding: 10px 15px;
+    border: none;
+    border-radius: 4px;
+    background-color: #3498db;
+    color: white;
+    cursor: pointer;
+    font-size: 16px;
+    margin-right: 5px;
+  }
+  button:hover {
+    background-color: #2980b9;
+  }
+  #delete-selected {
+    background-color: #e74c3c;
+  }
+  #delete-selected:hover {
+    background-color: #c0392b;
+  }
+  ul {
+    list-style: none;
+    padding: 0;
+    margin: 20px 0 0 0;
+  }
+  #todo-list li {
+    display: flex;
+    align-items: center;
+    padding: 12px 8px;
+    border-bottom: 1px solid #eee;
+  }
+  #todo-list li:last-child {
+    border-bottom: none;
+  }
+  .task-text {
+    flex-grow: 1;
+    margin: 0 10px;
+  }
+  .remove {
+    color: #e74c3c;
+    cursor: pointer;
+    font-weight: bold;
+    padding: 5px;
+  }
+  .remove:hover {
+    color: #c0392b;
+  }
+
+  /* This is the alarm highlight */
+  .highlight {
+    background-color: #fcf8e3;
+    font-weight: bold;
+    animation: pulse 1.5s infinite;
+  }
+  @keyframes pulse {
+    0% { background-color: #fcf8e3; }
+    50% { background-color: #f7e1b5; }
+    100% { background-color: #fcf8e3; }
+  }
+
+  /* History Panel */
+  #history-panel {
+    display: none; /* Hidden by default */
+    width: 100%;
+    max-width: 500px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    padding: 25px;
+    margin-top: 10px;
+  }
+  #history-list, #calendar-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #eee;
+    padding: 10px;
+    border-radius: 4px;
+    background: #fafafa;
+  }
+  #history-list li, #calendar-list li {
+    padding: 5px;
+    font-size: 0.9em;
+    border-bottom: 1px dashed #ddd;
+  }
+  #clear-history {
+    background-color: #95a5a6;
+    margin-top: 15px;
+  }
+  #clear-history:hover {
+    background-color: #7f8c8d;
+  }
+
+  /* FIX 4: Fixed typo in link */
+  a {
+    margin-top: 20px;
+    color: #3498db;
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+</style>
+</head>
+<body>
+
+<h2>To-Do Reminder</h2>
+
+<div id="container">
+  <input type="text" id="new-task" placeholder="Add a new task">
+  <input type="date" id="task-date">
+  <input type="time" id="task-time">
+  <button id="add-btn">Add Task</button>
+  <ul id="todo-list"></ul>
+  <button id="delete-selected">Delete Selected</button>
+</div>
+
+<div id="history">
+  <button id="history-btn">History</button>
+</div>
+
+<div id="history-panel">
+  <h3>🕒 Task History</h3>
+  <ul id="history-list"></ul>
+
+  <h3>📅 Calendar View (Sorted)</h3>
+  <ul id="calendar-list"></ul>
+
+  <button id="clear-history">Clear History</button>
+</div>
+
+<a href="constration.html">Want to Check your Speed</a>
+
+<audio id="alarm-sound" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA="></audio>
+
+<script>
+const STORAGE_KEY = "ToDoList_VAARV1AQ";
+const todoList = document.getElementById('todo-list');
+const historyList = document.getElementById('history-list');
+const calendarList = document.getElementById('calendar-list');
+const historyPanel = document.getElementById('history-panel');
+const alarmSound = document.getElementById('alarm-sound');
+
+// FIX 2: "js no work"
+// Removed 'calendarPanel' constant because the element #calendar-panel
+// does not exist in your HTML, and this was causing a crash.
+
+let data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {tasks:[],history:[]};
+if(!localStorage.getItem(STORAGE_KEY)) localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+
+// Load saved tasks & history
+data.tasks.forEach(t => addTaskToDOM(t.text, t.date, t.time));
+data.history.forEach(h => addHistoryToDOM(h));
+
+// FIX 3: Update calendar view on load
+updateCalendarView();
+
+// Save data
+function saveData(){
+  const tasks = [];
+  document.querySelectorAll('#todo-list li').forEach(li => {
+    tasks.push({text: li.querySelector('.task-text').textContent, date: li.dataset.date, time: li.dataset.time});
+  });
+  const history = [];
+  document.querySelectorAll('#history-list li').forEach(li => history.push(li.textContent));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({tasks, history}));
+}
+
+// Add task from input
+function addTask(){
+  const input = document.getElementById('new-task');
+  const dateInput = document.getElementById('task-date');
+  const timeInput = document.getElementById('task-time');
+  const task = input.value.trim();
+  const date = dateInput.value;
+  const time = timeInput.value;
+  if(!task) return;
+  
+  addTaskToDOM(task, date, time);
+  addHistoryToDOM(`Added: ${task}${date ? ' (' + date + ')' : ''}${time ? ' at ' + time : ''}`);
+  saveData();
+  
+  // FIX 3: Update calendar view after adding a task
+  updateCalendarView();
+  
+  input.value=''; dateInput.value=''; timeInput.value='';
+}
+
+// Add task to DOM
+function addTaskToDOM(taskText, dateValue = null, timeValue = null){
+  const li = document.createElement('li');
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.className = 'select-task';
+  
+  const span = document.createElement('span');
+  span.textContent = taskText;
+  span.className = 'task-text';
+  
+  li.dataset.date = dateValue;
+  li.dataset.time = timeValue;
+  
+  const removeBtn = document.createElement('span');
+  removeBtn.textContent = '✖';
+  removeBtn.className = 'remove';
+  removeBtn.onclick = () => {
+    li.remove();
+    addHistoryToDOM(`Removed: ${taskText}`);
+    saveData();
+    // FIX 3: Update calendar view after removing a task
+    updateCalendarView();
+  }
+  
+  li.appendChild(checkbox);
+  li.appendChild(span);
+  
+  // Add date/time info if it exists
+  if (dateValue || timeValue) {
+    const dateTimeSpan = document.createElement('span');
+    dateTimeSpan.textContent = `(${dateValue || 'No Date'}${timeValue ? ' at ' + timeValue : ''})`;
+    dateTimeSpan.style.fontSize = '0.8em';
+    dateTimeSpan.style.color = '#777';
+    dateTimeSpan.style.marginRight = '10px';
+    li.appendChild(dateTimeSpan);
+  }
+  
+  li.appendChild(removeBtn);
+  todoList.appendChild(li);
+
+  // FIX 3: Removed logic that added to calendar-list from here.
+  // It's now handled by the updateCalendarView() function.
+}
+
+// Add history
+function addHistoryToDOM(text){
+  const li = document.createElement('li');
+  li.textContent = text;
+  // Add to the top of the list
+  historyList.insertBefore(li, historyList.firstChild);
+}
+
+// Delete selected tasks
+function deleteSelected(){
+  document.querySelectorAll('.select-task:checked').forEach(box => {
+    const li = box.parentElement;
+    const txt = li.querySelector('.task-text').textContent;
+    li.remove();
+    addHistoryToDOM(`Deleted: ${txt}`);
+  });
+  saveData();
+  // FIX 3: Update calendar view after deleting tasks
+  updateCalendarView();
+}
+
+// Clear history
+function clearHistory(){
+  // FIX 3: This now *only* clears the history, not the calendar.
+  // The calendar view reflects current tasks, not history.
+  historyList.innerHTML = '';
+  data.history = [];
+  saveData();
+}
+
+// Toggle history panel
+function toggleHistory(){
+  historyPanel.style.display = (historyPanel.style.display === 'none' || historyPanel.style.display === '') ? 'block' : 'none';
+}
+
+// FIX 2: "js no work"
+// Removed the 'toggleCalendar' function because it was crashing the script.
+
+// FIX 3: New function to rebuild the calendar view
+function updateCalendarView() {
+  calendarList.innerHTML = ''; // Clear the list first
+  
+  const tasks = Array.from(document.querySelectorAll('#todo-list li'));
+  
+  const datedTasks = tasks
+    .filter(li => li.dataset.date) // Only get tasks that have a date
+    .sort((a, b) => {
+      // Sort by date and then by time
+      const dateTimeA = (a.dataset.date || '') + (a.dataset.time || '');
+      const dateTimeB = (b.dataset.date || '') + (b.dataset.time || '');
+      return dateTimeA.localeCompare(dateTimeB);
+    });
+
+  if (datedTasks.length === 0) {
+    calendarList.innerHTML = '<li>No tasks with dates.</li>';
+    return;
+  }
+    
+  datedTasks.forEach(li => {
+    const taskText = li.querySelector('.task-text').textContent;
+    const dateValue = li.dataset.date;
+    const timeValue = li.dataset.time;
+    
+    const calItem = document.createElement('li');
+    calItem.textContent = `${dateValue}${timeValue ? ' at ' + timeValue : ''} → ${taskText}`;
+    calendarList.appendChild(calItem);
+  });
+}
+
+// Voice setup - playful Indian style
+let reminderVoice = null;
+window.speechSynthesis.onvoiceschanged = () => {
+  const voices = speechSynthesis.getVoices();
+  reminderVoice = voices.find(v => v.name.includes("India") || v.name.includes("English")) || voices[0];
+};
+
+function speakReminder(text){
+  if(!text) return;
+  const utter = new SpeechSynthesisUtterance(`Haa! Ling-ling! Your alarm! Time over for ${text}! Chalo, chalo!`);
+  if(reminderVoice) utter.voice = reminderVoice;
+  utter.rate = 1;
+  utter.pitch = 1.3;
+  utter.volume = 0.8;
+  speechSynthesis.speak(utter);
+}
+
+// Reminder checker
+setInterval(() => {
+  const now = new Date();
+  const today = now.toISOString().split('T')[0];
+  const hh = now.getHours().toString().padStart(2, '0');
+  const mm = now.getMinutes().toString().padStart(2, '0');
+  
+  document.querySelectorAll('#todo-list li').forEach(li => {
+    if(li.dataset.date === today && li.dataset.time === `${hh}:${mm}` && !li.classList.contains('highlight')){
+      li.classList.add('highlight');
+      alarmSound.play();
+      speakReminder(li.querySelector('.task-text').textContent);
+    }
+  });
+}, 1000); // Check every second
+
+// Event listeners
+document.getElementById('add-btn').addEventListener('click', addTask);
+document.getElementById('new-task').addEventListener('keypress', e => {
+  if(e.key === 'Enter'){
+    e.preventDefault();
+    addTask();
+  }
+});
+document.getElementById('delete-selected').addEventListener('click', deleteSelected);
+document.getElementById('history-btn').addEventListener('click', toggleHistory);
+document.getElementById('clear-history').addEventListener('click', clearHistory);
+
+// FIX 2: "js no work"
+// Removed listeners for #calendar-btn and #calendar-add-btn
+// because they don't exist in the HTML and were crashing the script.
+
+</script>
+</body>
+</html>
